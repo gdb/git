@@ -3,6 +3,8 @@
 #include "exec_cmd.h"
 #include "strbuf.h"
 
+#define COMMAND_DIR "git-shell-commands"
+
 static int do_generic_cmd(const char *me, char *arg)
 {
 	const char *my_argv[4];
@@ -31,6 +33,17 @@ static int do_cvs_cmd(const char *me, char *arg)
 
 	setup_path();
 	return execv_git_cmd(cvsserver_argv);
+}
+
+static int is_valid_cmd_name(char *cmd)
+{
+	/* TODO: come up with not-stupid validation */
+	char *c;
+	for (c = cmd; *c; c++) {
+		if (*c == '.' || *c == '/')
+			return 0;
+	}
+	return 1;
 }
 
 
@@ -99,5 +112,12 @@ int main(int argc, char **argv)
 		}
 		exit(cmd->exec(cmd->name, arg));
 	}
+
+	if (chdir(COMMAND_DIR))
+		die("unrecognized command '%s'", prog);
+
+	if (is_valid_cmd_name(prog))
+		execl(prog, prog, (char *) NULL);
+
 	die("unrecognized command '%s'", prog);
 }
