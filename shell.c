@@ -1,9 +1,16 @@
+#include <stdio.h>
+#include <readline/readline.h>
+#include <readline/history.h>
+#include <signal.h>
+
+
 #include "cache.h"
 #include "quote.h"
 #include "exec_cmd.h"
 #include "strbuf.h"
 
 #define COMMAND_DIR "git-shell-commands"
+#define WAIT_FAILED 256
 
 static int do_generic_cmd(const char *me, char *arg)
 {
@@ -46,6 +53,35 @@ static int is_valid_cmd_name(char *cmd)
 	return 1;
 }
 
+static int run(char *prog)
+{
+	int pid, res, w;
+	/* TODO: check if prog is executable */
+	if ( (pid = fork()) == 0 ) {
+		execl(prog, prog, (char *) NULL);
+		if (prog[0] != '\0')
+			printf("unrecognized command '%s'\n", prog);
+		exit(127);
+	} else {
+		do {
+			res = waitpid (pid, &w, 0);
+		} while (res <= 0 && errno == EINTR);
+
+		if (res > 0) {
+			if (WIFEXITED(w)) {
+				return WEXITSTATUS(w);
+			} else if (WIFSIGNALED(w)) {
+				return -WTERMSIG(w);
+			} else {
+				/* TODO: can this happen? */
+				return WAIT_FAILED;
+			}
+		} else {
+			return WAIT_FAILED;
+		}
+	}
+}
+
 
 static struct commands {
 	const char *name;
@@ -86,8 +122,27 @@ int main(int argc, char **argv)
 	 * We do not accept anything but "-c" followed by "cmd arg",
 	 * where "cmd" is a very limited subset of git commands.
 	 */
-	else if (argc != 3 || strcmp(argv[1], "-c"))
-		die("What do you think I am? A shell?");
+	else if (argc != 3 || strcmp(argv[1], "-c")) {
+		if (chdir(COMMAND_DIR))
+			die("Sorry, the interactive git-shell is not enabled");
+		for (;;) {
+			prog = readline("git> ");
+			if (prog == NULL) {
+				printf("\n");
+				exit(0);
+			} else if (!strcmp(prog, "quit") || !strcmp(prog, "logout") ||
+				   !strcmp(prog, "exit")) {
+				exit(0);
+			} else if (!strcmp(prog, "")) {
+			} else if (is_valid_cmd_name(prog)) {
+				run(prog);
+				add_history(prog);
+			} else {
+				printf("invalid command format '%s'\n", prog);
+			}
+			free(prog);
+		};
+	}
 
 	prog = argv[2];
 	if (!strncmp(prog, "git", 3) && isspace(prog[3]))
