@@ -1,0 +1,5 @@
+#!/bin/bash
+set -eu
+
+print_if_bare_repo='[ "$(git --git-dir="$1" rev-parse --is-bare-repository)" = true ] && echo "${1#./}"'
+find -type d -name "*.git" -exec sh -c "$print_if_bare_repo" -- \{} \;
