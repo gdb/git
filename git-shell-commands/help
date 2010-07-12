@@ -1,0 +1,7 @@
+#!/bin/sh
+
+echo "Commands you may want to run by hand:"
+ls
+if tty -s; then
+    echo "You can leave by running 'exit'"
+fi
