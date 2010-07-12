@@ -1,0 +1,9 @@
+#!/bin/bash
+
+cd "..";
+# TODO: make safe for spaces
+for dir in $(find -type d -name '*.git'); do
+    if [ "$(git --git-dir="$dir" rev-parse --is-bare-repository)" = "true" ]; then
+	echo "${dir#./}"
+    fi
+done
