@@ -3,6 +3,8 @@
 #include "exec_cmd.h"
 #include "strbuf.h"
 
+#define COMMAND_DIR "git-shell-commands"
+
 static int do_generic_cmd(const char *me, char *arg)
 {
 	const char *my_argv[4];
@@ -33,6 +35,28 @@ static int do_cvs_cmd(const char *me, char *arg)
 	return execv_git_cmd(cvsserver_argv);
 }
 
+static int is_valid_cmd_name(const char *cmd)
+{
+	/* Test command contains no . or / characters */
+	return cmd[strcspn(cmd, "./")] == '\0';
+}
+
+static char *make_cmd(const char *prog)
+{
+	char *prefix = xmalloc((strlen(prog) + strlen(COMMAND_DIR) + 2));
+	strcpy(prefix, COMMAND_DIR);
+	strcat(prefix, "/");
+	strcat(prefix, prog);
+	return prefix;
+}
+
+static void cd_to_homedir(void) {
+	struct passwd *pw = getpwuid(geteuid());
+	if (pw == NULL)
+		die("could not retrieve user's passwd entry");
+	if (chdir(pw->pw_dir) == -1)
+		die("could not chdir to user's home directory");
+}
 
 static struct commands {
 	const char *name;
@@ -48,6 +72,7 @@ static struct commands {
 int main(int argc, char **argv)
 {
 	char *prog;
+	const char **user_argv;
 	struct commands *cmd;
 	int devnull_fd;
 
@@ -76,7 +101,7 @@ int main(int argc, char **argv)
 	else if (argc != 3 || strcmp(argv[1], "-c"))
 		die("What do you think I am? A shell?");
 
-	prog = argv[2];
+	prog = xstrdup(argv[2]);
 	if (!strncmp(prog, "git", 3) && isspace(prog[3]))
 		/* Accept "git foo" as if the caller said "git-foo". */
 		prog[3] = '-';
@@ -99,5 +124,19 @@ int main(int argc, char **argv)
 		}
 		exit(cmd->exec(cmd->name, arg));
 	}
-	die("unrecognized command '%s'", prog);
+
+	cd_to_homedir();
+	if (split_cmdline(prog, &user_argv) != -1) {
+		if (is_valid_cmd_name(user_argv[0])) {
+			prog = make_cmd(user_argv[0]);
+			user_argv[0] = prog;
+			execv(user_argv[0], (char *const *) user_argv);
+		}
+		free(prog);
+		free(user_argv);
+		die("unrecognized command '%s'", argv[2]);
+	} else {
+		free(prog);
+		die("invalid command format '%s'", argv[2]);
+	}
 }
