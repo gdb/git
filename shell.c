@@ -1,9 +1,18 @@
+#include <dlfcn.h>
+
 #include "cache.h"
 #include "quote.h"
 #include "run-command.h"
 
 #define COMMAND_DIR "git-shell-commands"
 #define HELP_COMMAND "git-shell-commands/help"
+
+struct readline_data {
+	void *handle;
+	char *(*readline)(const char *);
+	void (*add_history)(const char *);
+};
+static struct readline_data rl_data = {};
 
 static int do_generic_cmd(const char *me, char *arg)
 {
@@ -50,6 +59,82 @@ static char *make_cmd(const char *prog)
 	return prefix;
 }
 
+static char *git_shell_command_generator(const char *text, int state)
+{
+	static const char *help_cmd[4] = { HELP_COMMAND, "--prefix", NULL, NULL };
+	static struct child_process help_proc = {.argv = help_cmd, .no_stdin = 1,
+						 .no_stderr = 1, .silent_exec_failure = 1};
+	static int running = 0;
+	static FILE *cmd_list;
+	struct strbuf line = {};
+
+	/* Initialize */
+	if (!state)
+	{
+		if (running) {
+			fclose(cmd_list);
+			finish_command(&help_proc);
+		}
+		help_proc.out = -1;
+		help_cmd[2] = text;
+		if (start_command(&help_proc) != -1) {
+			if ((cmd_list = fdopen(help_proc.out, "r")) == NULL)
+				goto finish_cmd;
+			running = 1;
+		} else {
+			goto abort;
+		}
+	}
+
+	assert(running);
+	if (strbuf_getline(&line, cmd_list, '\n') != EOF) {
+		return strbuf_detach(&line, NULL);
+	}
+
+	strbuf_release(&line);
+	fclose(cmd_list);
+finish_cmd:
+	finish_command(&help_proc);
+abort:
+	running = 0;
+	return NULL;
+}
+
+static void *xdlsym(void *handle, const char *name)
+{
+	void *sym;
+	char *err;
+	dlerror();
+	sym = dlsym(handle, name);
+	if (sym == NULL && (err = dlerror()))
+		die("error finding symbol %s: %s", name, err);
+	return sym;
+}
+
+static void initialize_readline(void)
+{
+	char **rl_readline_name;
+	char *(**rl_completion_entry_function)(const char *, int);
+
+	if ((rl_data.handle = dlopen("libreadline.so", RTLD_NOW)) == NULL) {
+		rl_data = (struct readline_data) {};
+		return;
+	}
+	rl_readline_name = xdlsym(rl_data.handle, "rl_readline_name");
+	rl_completion_entry_function = xdlsym(rl_data.handle, "rl_completion_entry_function");
+	rl_data.readline = xdlsym(rl_data.handle, "readline");
+	rl_data.add_history = xdlsym(rl_data.handle, "add_history");
+
+	*rl_readline_name = "git-shell";
+	*rl_completion_entry_function = git_shell_command_generator;
+}
+
+static void shutdown_readline(void)
+{
+	if (rl_data.handle)
+		dlclose(rl_data.handle);
+}
+
 static void run_shell(void)
 {
 	struct strbuf line = STRBUF_INIT;
@@ -57,25 +142,38 @@ static void run_shell(void)
 	char *full_cmd;
 	char *rawargs;
 	const char **argv;
+	char *rawargs_cpy;
 	int code;
 	int done = 0;
+	int add_to_history = 0;
 
 	/* Print help if enabled */
-	argv = xmalloc(2 * sizeof(char *));
+	argv = xmalloc(3 * sizeof(char *));
 	argv[0] = HELP_COMMAND;
-	argv[1] = NULL;
+	argv[1] = "--login";
+	argv[2] = NULL;
 	code = run_command_v_opt(argv, RUN_SILENT_EXEC_FAILURE);
 	free(argv);
 
+	initialize_readline();
 	do {
-		fprintf(stderr, "git> ");
-		if (strbuf_getline(&line, stdin, '\n') == EOF) {
-			fprintf(stderr, "\n");
-			strbuf_release(&line);
-			exit(0);
+		if (rl_data.readline) {
+			if ((rawargs = rl_data.readline("git> ")) == NULL) {
+				fprintf(stderr, "\n");
+				goto shutdown;
+			}
+			strbuf_attach(&line, rawargs, strlen(rawargs), strlen(rawargs) + 1);
+		} else {
+			fprintf(stderr, "git> ");
+			if (strbuf_getline(&line, stdin, '\n') == EOF) {
+				fprintf(stderr, "\n");
+				strbuf_release(&line);
+				goto shutdown;
+			}
 		}
 		strbuf_trim(&line);
 		rawargs = strbuf_detach(&line, NULL);
+		rawargs_cpy = xstrdup(rawargs);
 		if (split_cmdline(rawargs, &argv) == -1) {
 			free(rawargs);
 			continue;
@@ -83,9 +181,11 @@ static void run_shell(void)
 
 		prog = argv[0];
 		if (!strcmp(prog, "")) {
+			add_to_history = 0;
 		} else if (!strcmp(prog, "quit") || !strcmp(prog, "logout") ||
 			   !strcmp(prog, "exit") || !strcmp(prog, "bye")) {
 			done = 1;
+			add_to_history = 0;
 		} else if (is_valid_cmd_name(argv[0])) {
 			full_cmd = make_cmd(argv[0]);
 			argv[0] = full_cmd;
@@ -94,13 +194,21 @@ static void run_shell(void)
 				fprintf(stderr, "unrecognized command '%s'\n", prog);
 			}
 			free(full_cmd);
+			add_to_history = 1;
 		} else {
 			fprintf(stderr, "invalid command format '%s'\n", prog);
+			add_to_history = 1;
 		}
 
+		if (add_to_history && rl_data.add_history)
+			rl_data.add_history(rawargs_cpy);
 		free(argv);
 		free(rawargs);
 	} while (!done);
+
+shutdown:
+	shutdown_readline();
+	exit(0);
 }
 
 static struct commands {
