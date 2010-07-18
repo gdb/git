@@ -1,7 +1,5 @@
 #include "cache.h"
 #include "quote.h"
-#include "exec_cmd.h"
-#include "strbuf.h"
 #include "run-command.h"
 
 #define COMMAND_DIR "git-shell-commands"
