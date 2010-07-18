@@ -2,15 +2,27 @@
 
 set -eu
 
-if tty -s; then
-    echo "Run 'help' for help, or 'exit' to leave.  Available commands:"
-else
-    echo "Run 'help' for help.  Available commands:"
-fi
-
 cd "$(dirname "$0")"
 
-for cmd in *; do
+prefix=
+case "${1-}" in
+    "--prefix")
+	if [ "$#" -ge 2 ]; then
+	    prefix="$2"
+	else
+	    prefix=
+	fi
+	;;
+    *)
+	if tty -s; then
+	    echo "Run 'help' for help, or 'exit' to leave.  Available commands:"
+	else
+	    echo "Run 'help' for help.  Available commands:"
+	fi
+	;;
+esac
+
+for cmd in "$prefix"*; do
     case "$cmd" in
 	help) ;;
 	*) [ -f "$cmd" ] && [ -x "$cmd" ] && echo "$cmd" ;;
