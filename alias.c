@@ -1,7 +1,9 @@
 #include "cache.h"
-
 static const char *alias_key;
 static char *alias_val;
+#define SPLIT_CMDLINE_BAD_ENDING 1
+#define SPLIT_CMDLINE_UNCLOSED_QUOTE 2
+static const char *split_cmdline_errors = { "cmdline ends with \\", "unclosed quote" };
 
 static int alias_lookup_cb(const char *k, const char *v, void *cb)
 {
@@ -53,7 +55,7 @@ int split_cmdline(char *cmdline, const char ***argv)
 				if (!c) {
 					free(*argv);
 					*argv = NULL;
-					return error("cmdline ends with \\");
+					return -SPLIT_CMDLINE_BAD_ENDING;
 				}
 			}
 			cmdline[dst++] = c;
@@ -66,7 +68,7 @@ int split_cmdline(char *cmdline, const char ***argv)
 	if (quoted) {
 		free(*argv);
 		*argv = NULL;
-		return error("unclosed quote");
+		return -SPLIT_CMDLINE_UNCLOSED_QUOTE;
 	}
 
 	ALLOC_GROW(*argv, count+1, size);
@@ -75,3 +77,6 @@ int split_cmdline(char *cmdline, const char ***argv)
 	return count;
 }
 
+const char *split_cmdline_strerror(int split_cmdline_errno) {
+	return split_cmdline_errors[-split_cmdline_errno-1];
+}
