@@ -423,8 +423,27 @@ int cmd_add(int argc, const char **argv, const char *prefix)
 		/* Set up the default git porcelain excludes */
 		memset(&dir, 0, sizeof(dir));
 		if (!ignored_too) {
+			const char **tracked = xmalloc(sizeof(char *) * (argc + 1));
+			const char **p;
+			int tidx = 0;
+			int pidx = 0;
+
 			dir.flags |= DIR_COLLECT_IGNORED;
 			setup_standard_excludes(&dir);
+
+			for (p = pathspec; *p; p++) {
+				if ((*p)[0] && cache_name_exists(*p, strlen(*p), 0))
+					tracked[tidx++] = *p;
+				else
+					pathspec[pidx++] = *p;
+			}
+
+			tracked[tidx] = NULL;
+			pathspec[pidx] = NULL;
+			exit_status |= add_files_to_cache(prefix, tracked, flags);
+			/* All files were tracked */
+			if (pidx == 0)
+				goto finish;
 		}
 
 		/* This picks up the paths that are not tracked */
