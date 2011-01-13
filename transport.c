@@ -678,27 +678,27 @@ static int print_one_push_status(struct ref *ref, const char *dest, int count, i
 
 	switch(ref->status) {
 	case REF_STATUS_NONE:
-		print_ref_status('X', "[no match]", ref, NULL, NULL, porcelain);
+		print_ref_status('X', flavortext_lookup("no-match"), ref, NULL, NULL, porcelain);
 		break;
 	case REF_STATUS_REJECT_NODELETE:
-		print_ref_status('!', "[rejected]", ref, NULL,
+		print_ref_status('!', flavortext_lookup("rejected"), ref, NULL,
 						 "remote does not support deleting refs", porcelain);
 		break;
 	case REF_STATUS_UPTODATE:
-		print_ref_status('=', "[up to date]", ref,
+		print_ref_status('=', flavortext_lookup("up-to-date"), ref,
 						 ref->peer_ref, NULL, porcelain);
 		break;
 	case REF_STATUS_REJECT_NONFASTFORWARD:
-		print_ref_status('!', "[rejected]", ref, ref->peer_ref,
+		print_ref_status('!', flavortext_lookup("rejected"), ref, ref->peer_ref,
 						 "non-fast-forward", porcelain);
 		break;
 	case REF_STATUS_REMOTE_REJECT:
-		print_ref_status('!', "[remote rejected]", ref,
+		print_ref_status('!', flavortext_lookup("remote-rejected"), ref,
 						 ref->deletion ? NULL : ref->peer_ref,
 						 ref->remote_status, porcelain);
 		break;
 	case REF_STATUS_EXPECTING_REPORT:
-		print_ref_status('!', "[remote failure]", ref,
+		print_ref_status('!', flavortext_lookup("remote-failure"), ref,
 						 ref->deletion ? NULL : ref->peer_ref,
 						 "remote failed to report status", porcelain);
 		break;

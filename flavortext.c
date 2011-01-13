@@ -43,6 +43,15 @@ void flavortext_init() {
 	if (initialized)
 		return;
 	initialized = 1;
+	/* builtins/help.c */
+	flavortext_insert("commonly-used-commands", "The most commonly used git commands are:");
+
+	/* transport.c */
+	flavortext_insert("no-match", "[no match]");
+	flavortext_insert("rejected", "[rejected]");
+	flavortext_insert("up-to-date", "[up to date]");
+	flavortext_insert("remote-rejected", "[remote rejected]");
+	flavortext_insert("remote-failure", "[remote failure]");
 }
 
 void flavortext_insert(const char *key, const char *val)
