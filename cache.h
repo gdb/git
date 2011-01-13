@@ -5,6 +5,7 @@
 #include "strbuf.h"
 #include "hash.h"
 #include "advice.h"
+#include "flavortext.h"
 
 #include SHA1_HEADER
 #ifndef git_SHA_CTX

@@ -510,6 +510,7 @@ static int run_argv(int *argcp, const char ***argv)
 int main(int argc, const char **argv)
 {
 	const char *cmd;
+	flavortext_init();
 
 	startup_info = &git_startup_info;
 
